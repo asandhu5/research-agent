@@ -1,0 +1,105 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# requirements.txt — Autonomous Web Research Agent
+# Every package is pinned to a specific version so your environment is
+# fully reproducible across machines. "Pinned versions" means that running
+# `pip install -r requirements.txt` on any machine produces the identical
+# dependency tree, preventing subtle version-mismatch bugs in production.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# LangGraph — The core state-machine framework. It turns Python functions into
+# "nodes" in a directed graph and manages state transitions between them.
+# This is what allows the agent to loop (search → evaluate → search again)
+# without you manually writing while-loops.
+langgraph==0.2.55
+
+# LangChain — High-level abstractions over LLMs and tools. Provides wrappers
+# like ChatOpenAI, PromptTemplate, and output parsers so you don't have to
+# hand-craft every OpenAI API call. Acts as "glue" between LangGraph and
+# the actual LLM.
+langchain==0.3.13
+
+# LangChain-Core — The minimal base layer (message types, runnable interfaces,
+# callbacks). Separated from langchain so that lightweight consumers (like
+# LangGraph nodes) don't import the entire framework unnecessarily.
+langchain-core==0.3.28
+
+# LangChain-OpenAI — OpenAI-specific adapters. Wraps ChatOpenAI and
+# OpenAIEmbeddings behind LangChain's standard interface so the rest of
+# the code never calls the OpenAI SDK directly, keeping it model-agnostic.
+langchain-openai==0.2.14
+
+# LangChain-Community — Community-contributed integrations (DuckDuckGo search
+# wrapper lives here). Lets us use DuckDuckGo as a fallback search without
+# writing a custom HTTP client.
+langchain-community==0.3.13
+
+# Tavily-Python — Official Python client for the Tavily Search API. Tavily is
+# purpose-built for LLM agents: it returns pre-cleaned, relevance-ranked
+# snippets with URLs, saving us from scraping every result ourselves.
+tavily-python==0.5.0
+
+# DuckDuckGo-Search — Free, no-API-key search library that hits the DDG
+# backend. Used as a graceful fallback when the Tavily key is absent, so
+# the agent never fully stalls during development/offline testing.
+duckduckgo-search==6.3.7
+
+# ChromaDB — An open-source, embedded vector database that stores embeddings
+# locally on disk (./data/chroma_db/). It handles cosine-similarity queries
+# so we don't have to implement ANN (Approximate Nearest Neighbor) search
+# ourselves. "Embedded" means no server process — just a Python call.
+chromadb==0.5.23
+
+# Sentence-Transformers — HuggingFace library that runs embedding models
+# locally without an API key. We use all-MiniLM-L6-v2 (22 MB) as the
+# offline fallback when OPENAI_API_KEY is absent. Slower than OpenAI
+# embeddings but fully free and privacy-preserving.
+sentence-transformers==3.3.1
+
+# BeautifulSoup4 — HTML/XML parser. Given a raw webpage string, it builds
+# a parse tree you can query with CSS selectors or tag names. We use it
+# to strip <script>, <style>, <nav>, and <footer> tags before extracting
+# meaningful text content.
+beautifulsoup4==4.12.3
+
+# lxml — A fast C-based XML/HTML parser that BeautifulSoup can use as its
+# backend engine (specified via `features="lxml"`). Much faster than
+# Python's built-in html.parser on large pages.
+lxml==5.3.0
+
+# Requests — The de-facto Python HTTP library. We use it to download raw
+# webpage HTML with custom User-Agent headers and a configurable timeout,
+# ensuring the scraper doesn't block indefinitely on slow or broken sites.
+requests==2.32.3
+
+# Pydantic — Runtime data validation using Python type hints. Every state
+# object flowing through the graph is validated by Pydantic, catching
+# type mismatches (e.g., a string where a float is expected) before they
+# silently corrupt downstream nodes.
+pydantic==2.10.4
+
+# Streamlit — Turns Python scripts into interactive web apps with zero
+# front-end code. We use it for the live research dashboard (Tab 1) and
+# the memory explorer (Tab 2). Streamlit re-runs the script top-to-bottom
+# on every user interaction, which pairs well with session_state caching.
+streamlit==1.41.1
+
+# Pytest — The standard Python testing framework. Discovers test files by
+# convention (test_*.py), provides fixtures for setup/teardown, and gives
+# clear assertion failure messages. We use it for all 5 unit tests.
+pytest==8.3.4
+
+# Python-Dotenv — Reads key=value pairs from a `.env` file and injects them
+# into `os.environ`. This is the standard way to keep API keys out of
+# source code — you put OPENAI_API_KEY=sk-... in .env (git-ignored) and
+# call load_dotenv() once at startup.
+python-dotenv==1.0.1
+
+# TQDM — A lightweight progress-bar library. A single decorator or context
+# manager wraps any iterable and prints a live progress bar to the terminal,
+# making long scraping or embedding loops feel transparent instead of frozen.
+tqdm==4.67.1
+
+# OpenAI — The official OpenAI Python client (used internally by
+# langchain-openai). Pinned here to prevent accidental upgrades that break
+# the response schema (OpenAI changes their SDK frequently).
+openai==1.58.1
