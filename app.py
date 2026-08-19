@@ -1,25 +1,4 @@
-"""
-app.py — Streamlit Research Dashboard
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-USAGE:
-    streamlit run app.py
 
-    Opens at http://localhost:8501
-
-ARCHITECTURE:
-    Streamlit re-runs this ENTIRE script top-to-bottom on every user interaction.
-    The key to preserving data between re-runs is `st.session_state` — a dict-like
-    object that persists across re-runs within the same browser session.
-
-    We use session_state to store:
-    - `research_state`: The final ResearchState dict after agent completes.
-    - `execution_log`: List of (node_name, timestamp) tuples for the progress tree.
-    - `is_running`: Boolean flag to prevent double-submission.
-
-TWO TABS:
-    Tab 1 — Research Workstation: Run queries, see live progress, read reports.
-    Tab 2 — Long-Term Memory Explorer: Browse, search, and manage ChromaDB records.
-"""
 
 import os           # for API key checks
 import re           # for citation counting in the summary panel
@@ -30,24 +9,15 @@ from typing import Optional    # type hints
 import streamlit as st         # the entire UI framework
 from dotenv import load_dotenv  # load .env before anything else
 
-load_dotenv()  # ensure API keys are loaded from .env file
+load_dotenv()
 
-# ─────────────────────────────────────────────────────────────────────────────
-# PAGE CONFIGURATION
-# Must be the FIRST Streamlit call in the script. Configures browser tab title,
-# layout width, and sidebar state.
-# ─────────────────────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Research Agent",
     page_icon="🔬",
-    layout="wide",                   # use full browser width (good for long reports)
-    initial_sidebar_state="collapsed",  # sidebar hidden by default (we use tabs instead)
+    layout="wide",
+    initial_sidebar_state="collapsed",
 )
 
-# ─────────────────────────────────────────────────────────────────────────────
-# CUSTOM CSS
-# Injects styling for the execution timeline, source cards, and metric badges.
-# ─────────────────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
     /* Main header styling */
@@ -150,14 +120,7 @@ st.markdown("""
         margin-bottom: 1rem;
     }
 </style>
-""", unsafe_allow_html=True)  # unsafe_allow_html=True is required to inject custom CSS
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# SESSION STATE INITIALIZATION
-# st.session_state persists across Streamlit re-runs within one browser session.
-# We initialize keys only if they don't already exist to avoid resetting on re-run.
-# ─────────────────────────────────────────────────────────────────────────────
+""", unsafe_allow_html=True)
 
 if "research_state" not in st.session_state:
     st.session_state.research_state = None   # will hold the final ResearchState dict
@@ -172,45 +135,19 @@ if "last_query" not in st.session_state:
     st.session_state.last_query = ""         # tracks the most recent query for display
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# HELPER FUNCTIONS
-# ─────────────────────────────────────────────────────────────────────────────
 
 def check_api_keys() -> tuple[bool, bool]:
-    """
-    Check which API keys are configured.
 
-    Returns:
-        (has_openai: bool, has_tavily: bool)
-    """
     has_openai = bool(os.environ.get("OPENAI_API_KEY", "").strip())
     has_tavily = bool(os.environ.get("TAVILY_API_KEY", "").strip())
     return has_openai, has_tavily
 
-
 def run_agent_with_streaming(question: str) -> dict:
-    """
-    Execute the research agent with live node-by-node progress updates.
 
-    HOW STREAMLIT STREAMING WORKS:
-        LangGraph's graph.stream() returns a generator that yields a dict
-        after each node completes. The dict has the form:
-            {"node_name": {"key": value, ...}}
-
-        We iterate this generator inside a st.empty() placeholder, updating
-        the display after each node completes.
-
-    Args:
-        question: The research query string.
-
-    Returns:
-        The final accumulated state dict after all nodes complete.
-    """
     from graph_builder import build_research_graph
 
     graph = build_research_graph(use_checkpointer=False)
 
-    # Initial state for graph execution
     initial_state = {
         "question": question,
         "recalled_memories": [],
@@ -226,9 +163,6 @@ def run_agent_with_streaming(question: str) -> dict:
         "memory_stored": False,
     }
 
-    # Node display names for user-friendly progress messages.
-    # Keyed by node name (graph_builder.py's "planner", not the "plan" state
-    # key state.get("plan", ...) elsewhere in this file reads from).
     node_display_names = {
         "recall": "🧠 Recalling Long-Term Memory",
         "planner": "📋 Planning Research Sub-Queries",
@@ -241,16 +175,13 @@ def run_agent_with_streaming(question: str) -> dict:
     accumulated_state = {**initial_state}  # track cumulative state across all nodes
     st.session_state.execution_log = []     # reset execution log for this run
 
-    # Container for live progress tree — updated after each node
     progress_container = st.empty()
 
     for node_update in graph.stream(initial_state):
-        # node_update is a dict like: {"planner": {"plan": ["query1", "query2", ...], ...}}
         for node_name, node_output in node_update.items():
             timestamp = datetime.now().strftime("%H:%M:%S")
             display_name = node_display_names.get(node_name, f"⚙️  {node_name}")
 
-            # Record this node completion in the execution log
             st.session_state.execution_log.append({
                 "node": node_name,
                 "display": display_name,
@@ -259,30 +190,19 @@ def run_agent_with_streaming(question: str) -> dict:
                 "output_keys": list(node_output.keys()) if isinstance(node_output, dict) else [],
             })
 
-            # Merge node output into accumulated state
             if isinstance(node_output, dict):
                 accumulated_state.update(node_output)
 
-            # Rebuild the progress display with all completed nodes
             with progress_container.container():
                 st.markdown("**Execution Progress:**")
                 for log_entry in st.session_state.execution_log:
                     _render_node_card(log_entry, accumulated_state)
 
-    return accumulated_state  # final accumulated state after all nodes completed
+    return accumulated_state
 
 
 def _render_node_card(log_entry: dict, state: dict) -> None:
-    """
-    Render a single node execution card in the progress tree.
 
-    Uses st.expander() so each node's details are collapsible.
-    The expander label shows the node's display name and completion timestamp.
-
-    Args:
-        log_entry: Dict with node, display, timestamp, status, output_keys.
-        state: The accumulated state (used to show node-specific details).
-    """
     node = log_entry["node"]
     label = f"{log_entry['display']} — {log_entry['timestamp']}"
 
@@ -298,9 +218,6 @@ def _render_node_card(log_entry: dict, state: dict) -> None:
                 st.caption("No prior memories found for this query (cold start).")
 
         elif node == "planner":
-            # Show the generated sub-queries (this node also runs again, in
-            # replan mode, on a loop-back -- missing_topics is what it used
-            # to target this pass if iteration > 0 at this point).
             plan = state.get("plan", [])
             missing = state.get("missing_topics", [])
             if state.get("iteration", 0) > 0 and missing:
@@ -348,12 +265,7 @@ def _render_node_card(log_entry: dict, state: dict) -> None:
 
 
 def render_source_list(sources: list) -> None:
-    """
-    Render a numbered list of hyperlinked source documents.
 
-    Args:
-        sources: List of SourceDocument objects or dicts with title/url.
-    """
     if not sources:
         st.caption("No sources available.")
         return
@@ -369,12 +281,6 @@ def render_source_list(sources: list) -> None:
             unsafe_allow_html=True,
         )
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# MAIN APP LAYOUT
-# ─────────────────────────────────────────────────────────────────────────────
-
-# Page header
 st.markdown("""
 <div class="main-header">
     <h1>🔬 Autonomous Web Research Agent</h1>
@@ -382,7 +288,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ── API KEY WARNING BANNER ────────────────────────────────────────────────────
 has_openai, has_tavily = check_api_keys()
 if not has_openai:
     st.markdown(
@@ -393,18 +298,12 @@ if not has_openai:
         unsafe_allow_html=True,
     )
 
-# ── TABS ─────────────────────────────────────────────────────────────────────
 tab1, tab2 = st.tabs(["🔬 Research Workstation", "🧠 Long-Term Memory Explorer"])
 
-
-# ════════════════════════════════════════════════════════════════════════════
-# TAB 1: RESEARCH WORKSTATION
-# ════════════════════════════════════════════════════════════════════════════
 
 with tab1:
     st.markdown("### Research Query")
 
-    # ── EXAMPLE PROMPTS ───────────────────────────────────────────────────────
     example_queries = [
         "What are the top techniques for reducing hallucinations in RAG systems in 2025?",
         "How does GraphRAG use knowledge graphs to improve retrieval quality?",
@@ -427,9 +326,8 @@ with tab1:
             # Pre-fill the query box with the selected example
             if selected_example != "(type your own question below)":
                 st.session_state["query_input"] = selected_example
-                st.rerun()  # re-run the script so the text_area shows the new value
+                st.rerun()
 
-    # ── QUERY INPUT ───────────────────────────────────────────────────────────
     query = st.text_area(
         "Enter your research question:",
         value=st.session_state.get("query_input", ""),
@@ -456,7 +354,6 @@ with tab1:
             st.session_state.last_query = ""
             st.rerun()
 
-    # ── AGENT EXECUTION ───────────────────────────────────────────────────────
     if run_button and query.strip():
         st.session_state.is_running = True
         st.session_state.last_query = query.strip()
@@ -485,7 +382,6 @@ with tab1:
 
         st.rerun()  # re-run to display results section below
 
-    # ── RESULTS SECTION ───────────────────────────────────────────────────────
     if st.session_state.research_state:
         state = st.session_state.research_state
 
@@ -500,7 +396,6 @@ with tab1:
         st.markdown("---")
         st.markdown(f"### Results for: _{st.session_state.last_query[:80]}_")
 
-        # ── METRICS ROW ───────────────────────────────────────────────────────
         mcol1, mcol2, mcol3, mcol4, mcol5 = st.columns(5)
         with mcol1:
             st.metric("Eval Score", f"{eval_score:.2f}", help="LLM's sufficiency score (0–1). >0.7 = comprehensive.")
@@ -513,13 +408,11 @@ with tab1:
         with mcol5:
             st.metric("Memory Saved", "✓" if memory_stored else "✗", help="Whether findings were persisted to ChromaDB.")
 
-        # ── EVALUATION REASONING ─────────────────────────────────────────────
         reasoning = state.get("evaluation_reasoning", "")
         if reasoning:
             with st.expander("📊 Evaluation Analysis", expanded=False):
                 st.markdown(reasoning)
 
-        # ── EXECUTION LOG ─────────────────────────────────────────────────────
         if st.session_state.execution_log:
             with st.expander("⚙️ Execution Log", expanded=False):
                 for entry in st.session_state.execution_log:
@@ -530,7 +423,6 @@ with tab1:
                         unsafe_allow_html=True,
                     )
 
-        # ── REPORT VIEWER ─────────────────────────────────────────────────────
         st.markdown("---")
         st.markdown("### 📄 Research Report")
 
@@ -539,13 +431,11 @@ with tab1:
         else:
             st.warning("No report was generated. This usually means no web content could be scraped.")
 
-        # ── SOURCES ───────────────────────────────────────────────────────────
         if sources:
             st.markdown("---")
             st.markdown("### 🔗 Sources")
             render_source_list(sources)
 
-        # ── DOWNLOAD BUTTON ───────────────────────────────────────────────────
         if report:
             st.download_button(
                 label="⬇️ Download Report as Markdown",
@@ -555,11 +445,6 @@ with tab1:
                 use_container_width=False,
             )
 
-
-# ════════════════════════════════════════════════════════════════════════════
-# TAB 2: LONG-TERM MEMORY EXPLORER
-# ════════════════════════════════════════════════════════════════════════════
-
 with tab2:
     st.markdown("### 🧠 Persistent Memory Store (ChromaDB)")
     st.caption(
@@ -567,7 +452,6 @@ with tab2:
         "Run `python download_sample_data.py` to seed the store with sample memories."
     )
 
-    # Load memory manager (cached to avoid re-initializing on every re-run)
     @st.cache_resource  # cache the MemoryManager across re-runs (one init per server restart)
     def get_memory_manager():
         """Returns a cached MemoryManager instance."""
@@ -578,7 +462,6 @@ with tab2:
         memory = get_memory_manager()
         total_count = memory.count
 
-        # ── STATS BAR ─────────────────────────────────────────────────────────
         col_stat1, col_stat2, col_stat3 = st.columns(3)
         with col_stat1:
             st.metric("Total Memories", total_count)
@@ -591,7 +474,6 @@ with tab2:
 
         st.markdown("---")
 
-        # ── MEMORY SEARCH BOX ─────────────────────────────────────────────────
         st.markdown("#### Test Memory Retrieval")
         mem_col1, mem_col2 = st.columns([4, 1])
 
@@ -627,14 +509,11 @@ with tab2:
                 st.info("No memories found. Try running `python download_sample_data.py` first.")
 
         st.markdown("---")
-
-        # ── ALL MEMORIES TABLE ────────────────────────────────────────────────
         st.markdown("#### All Stored Memories")
 
         all_memories = memory.get_all_memories()
 
         if all_memories:
-            # Render as card grid
             for mem_data in all_memories:
                 with st.expander(f"📝 {mem_data['topic'][:80]}", expanded=False):
                     info_col, _ = st.columns([2, 1])
@@ -644,7 +523,6 @@ with tab2:
                         st.caption(f"**ID:** {mem_data['id'][:16]}...")
                     st.markdown(mem_data['summary'])
 
-                    # Show raw metadata in a nested expander
                     raw_meta = mem_data.get("metadata", {})
                     if raw_meta:
                         with st.expander("Raw Metadata"):
@@ -669,7 +547,6 @@ with tab2:
 
         st.markdown("---")
 
-        # ── CLEAR MEMORY BUTTON ───────────────────────────────────────────────
         st.markdown("#### Danger Zone")
         st.warning(
             "**Clear Memory** permanently deletes ALL stored research from ChromaDB. "
@@ -696,9 +573,6 @@ with tab2:
         )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# FOOTER
-# ─────────────────────────────────────────────────────────────────────────────
 st.markdown("---")
 st.markdown(
     '<p style="text-align:center;color:#475569;font-size:0.8rem;">'

@@ -1,18 +1,4 @@
-"""
-main.py — CLI Entry Point for the Research Agent
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-USAGE:
-    python main.py --query "What are the top RAG hallucination mitigation techniques?"
-    python main.py --query "Explain GraphRAG" --output ./my_report.md
-    python main.py --query "ViT vs CNN comparison" --no-memory
 
-This script is the command-line interface for running a single research query.
-It wraps graph_builder.run_research() and handles:
-    - Argument parsing (query, output file, flags)
-    - Environment variable validation
-    - Clear startup diagnostics
-    - Writing the final report to a Markdown file
-"""
 
 import argparse    # standard library CLI argument parser
 import os          # environment variable reading
@@ -21,16 +7,11 @@ from pathlib import Path  # cross-platform file paths
 from datetime import datetime  # for timestamped output filenames
 
 from dotenv import load_dotenv
-load_dotenv()  # load .env before importing LangChain (which reads API keys at import)
+load_dotenv()
 
 
 def parse_args() -> argparse.Namespace:
-    """
-    Define and parse command-line arguments.
 
-    Returns:
-        An argparse.Namespace object with attributes for each argument.
-    """
     parser = argparse.ArgumentParser(
         prog="main.py",
         description="Autonomous Web Research Agent with Persistent Long-Term Memory",
@@ -87,15 +68,7 @@ Setup:
 
 
 def validate_environment() -> bool:
-    """
-    Check that required API keys are configured and print a diagnostic summary.
 
-    We don't REQUIRE OpenAI key here (user might want to test with mocks),
-    but we warn loudly if it's missing since the full pipeline won't work.
-
-    Returns:
-        True if minimum required keys are set, False otherwise.
-    """
     has_openai = bool(os.environ.get("OPENAI_API_KEY", "").strip())
     has_tavily = bool(os.environ.get("TAVILY_API_KEY", "").strip())
 
@@ -108,22 +81,13 @@ def validate_environment() -> bool:
         print("Create a .env file with:")
         print("  OPENAI_API_KEY=sk-your-key-here")
         print("\nFor testing WITHOUT an API key, run: pytest tests/")
-        return False  # signal caller to exit
+        return False
 
-    return True  # all required keys present
+    return True
 
 
 def save_report(report: str, output_path: str) -> str:
-    """
-    Save the final Markdown report to a file.
 
-    Args:
-        report: The Markdown string from the synthesizer node.
-        output_path: Desired file path, or None to auto-generate.
-
-    Returns:
-        The actual file path where the report was saved.
-    """
     if not output_path:
         # Auto-generate filename: report_YYYYMMDD_HHMMSS.md
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -137,12 +101,6 @@ def save_report(report: str, output_path: str) -> str:
 
 
 def main():
-    """
-    Main CLI execution function.
-
-    Orchestrates: argument parsing → environment validation → graph execution
-    → report display → file saving.
-    """
     args = parse_args()
 
     print("=" * 70)
@@ -150,23 +108,17 @@ def main():
     print("=" * 70)
     print(f"  Query: {args.query}")
 
-    # Override config if iteration count is specified via CLI
     if args.iterations:
-        # Temporarily monkey-patch the config for this run.
-        # In a production system, you'd pass this through a Config override mechanism.
         import config
         object.__setattr__(config.cfg, 'max_iterations', args.iterations)
         print(f"  Max iterations: {args.iterations} (overriding default)")
 
-    # Validate environment before doing expensive operations
     if not validate_environment():
-        sys.exit(1)  # exit with error code so shell scripts can detect failure
+        sys.exit(1)
 
-    # Import after environment validation to avoid import-time LLM initialization
     from graph_builder import run_research
     from memory_manager import MemoryManager
 
-    # Show memory status
     try:
         mem = MemoryManager()
         print(f"  Memory store:   {mem.count} records in ChromaDB")
@@ -177,10 +129,8 @@ def main():
 
     print()
 
-    # ── RUN THE RESEARCH AGENT ────────────────────────────────────────────────
     final_state = run_research(args.query)
 
-    # ── DISPLAY RESULTS ───────────────────────────────────────────────────────
     report = final_state.get("final_report", "")
     sources = final_state.get("sources", [])
     eval_score = final_state.get("evaluation_score", 0.0)
@@ -200,7 +150,6 @@ def main():
     print(f"  Memory recalled:     {len(recalled)} past research sessions")
     print(f"  Memory stored:       {final_state.get('memory_stored', False)}")
 
-    # ── SAVE REPORT TO FILE ───────────────────────────────────────────────────
     if report:
         saved_path = save_report(report, args.output)
         print(f"\n  Report saved to:     {saved_path}")

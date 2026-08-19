@@ -1,22 +1,4 @@
-"""
-download_sample_data.py — Sample Dataset Generator & ChromaDB Seeder
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PURPOSE:
-    This script creates a pre-populated memory store so you can test the
-    long-term memory feature WITHOUT needing API keys or internet access.
 
-    It generates 4 synthetic research documents representing past research
-    on ML topics, writes them as HTML and text files, then embeds and ingests
-    them into ChromaDB.
-
-    After running this script, the agent will "remember" past research on:
-    1. Vision Transformer (ViT) architectures
-    2. RAG hallucination mitigation techniques (2025)
-    3. Quantization with QLoRA
-    4. Agentic workflows with LangGraph
-
-RUN THIS BEFORE pytest tests/ TO SEED THE LOCAL VECTOR STORE.
-"""
 
 import os           # file system operations
 import sys          # for sys.exit() on critical failures
@@ -27,17 +9,9 @@ from pathlib import Path  # modern path manipulation (cleaner than os.path)
 from dotenv import load_dotenv
 load_dotenv()
 
-# Import our own modules
 from config import cfg               # paths and hyperparameters
 from memory_manager import MemoryManager  # vector store interface
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# SAMPLE DOCUMENTS
-# Each document simulates a past research session the agent completed.
-# They are intentionally substantive (200-400 words each) so the embedding
-# captures rich semantic information for the similarity search to work on.
-# ─────────────────────────────────────────────────────────────────────────────
 
 SAMPLE_DOCUMENTS = [
     {
@@ -285,15 +259,7 @@ def create_sample_html(doc: dict) -> str:
 
 
 def create_sample_text(doc: dict) -> str:
-    """
-    Generate a plain-text research document from document data.
 
-    Args:
-        doc: A SAMPLE_DOCUMENTS entry dict.
-
-    Returns:
-        A formatted plain-text string with headers and content.
-    """
     source_list = "\n".join(
         f"  [{i+1}] {url}"
         for i, url in enumerate(doc['metadata']['source_urls'])
@@ -326,17 +292,7 @@ END OF DOCUMENT
 
 
 def main():
-    """
-    Main execution function. Creates files, ingests into ChromaDB, and verifies.
 
-    Execution steps:
-    1. Create output directories.
-    2. Write HTML and text files to ./data/sample_documents/.
-    3. Initialize MemoryManager (creates ChromaDB if it doesn't exist).
-    4. Embed and store each document summary in ChromaDB.
-    5. Verify storage by querying back a test query and checking counts.
-    6. Print final summary with exact counts and file locations.
-    """
     print("=" * 60)
     print("Research Agent — Sample Data Generator")
     print("=" * 60)

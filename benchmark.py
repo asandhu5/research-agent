@@ -1,38 +1,4 @@
-"""
-benchmark.py — Evaluation & Performance Metrics Suite
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PURPOSE:
-    Systematically measure the research agent's performance across standardized
-    queries and report latency, recall rate, citation density, and iteration counts.
 
-METRICS EXPLAINED:
-
-    1. Total Latency (seconds):
-       Wall-clock time from graph.invoke() start to final state return.
-       Includes LLM call latency, web scraping time, and embedding calls.
-       Target: < 60s for a single query with 3 iterations.
-
-    2. Memory Recall Hit Rate:
-       Percentage of queries where recalled_memories was non-empty.
-       High rate = agent effectively leverages past work.
-       Formula: queries_with_recalls / total_queries × 100
-
-    3. Search Request Count:
-       Total number of web search requests made per query.
-       = len(plan) × iterations = 3-5 sub-queries × 1-3 iterations.
-       Lower is better (memory recall reduces search needs).
-
-    4. Citation Ratio:
-       Number of citation markers [1], [2], etc. per 500 words in the final report.
-       Measures how well the synthesizer grounds claims in sources.
-       Formula: citation_count / (word_count / 500)
-       Target: > 2.0 citations per 500 words for a well-cited report.
-
-    5. Evaluation Score:
-       The final evaluation_score returned by the evaluator node.
-       Measures how comprehensively the research answered the question.
-       Target: > 0.7 for a production-quality report.
-"""
 
 import json         # writing benchmark results to JSON file
 import time         # measuring wall-clock latency
@@ -48,11 +14,6 @@ load_dotenv()
 from config import cfg              # benchmark output path
 from memory_manager import MemoryManager  # for checking memory state
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# BENCHMARK QUERY SET
-# Three queries covering different domains and memory-leveraging scenarios.
-# ─────────────────────────────────────────────────────────────────────────────
 
 BENCHMARK_QUERIES = [
     {
@@ -77,57 +38,18 @@ BENCHMARK_QUERIES = [
 
 
 def count_citations(report_text: str) -> int:
-    """
-    Count the number of inline citation markers in a Markdown report.
 
-    Citation markers follow the pattern [1], [2], [3], etc.
-    We use a regex that matches opening bracket, one or more digits, closing bracket.
-
-    Args:
-        report_text: The full Markdown report string.
-
-    Returns:
-        Integer count of citation markers found.
-    """
-    # Pattern: \[ matches literal [, \d+ matches one or more digits, \] matches literal ]
     citations = re.findall(r'\[\d+\]', report_text)
     return len(citations)  # count all matches
 
 
 def count_words(text: str) -> int:
-    """
-    Count words in a text string.
 
-    Uses a simple whitespace split for word counting.
-    For a Markdown report, this includes headers and citation markers as "words",
-    which is intentional — we want total word count for the citation ratio formula.
-
-    Args:
-        text: Any string.
-
-    Returns:
-        Integer word count.
-    """
     return len(text.split())  # split on any whitespace
 
 
 def calculate_citation_ratio(report_text: str) -> float:
-    """
-    Calculate citations per 500 words in the report.
 
-    WHY 500-WORD NORMALIZATION?
-        Raw citation counts aren't comparable across reports of different lengths.
-        A 100-word report with 2 citations and a 1000-word report with 2 citations
-        have very different citation densities. Per-500-word normalizes for length.
-
-    Formula: citation_ratio = citation_count / (word_count / 500)
-
-    Args:
-        report_text: Full Markdown report.
-
-    Returns:
-        Float citations-per-500-words ratio. Returns 0.0 for empty reports.
-    """
     if not report_text:
         return 0.0
 
@@ -143,18 +65,7 @@ def calculate_citation_ratio(report_text: str) -> float:
 
 
 def run_single_benchmark(query_config: dict) -> dict:
-    """
-    Run a single benchmark query and collect all metrics.
 
-    This function runs the full agent pipeline for one query and captures
-    timing, memory usage, and output quality metrics.
-
-    Args:
-        query_config: One entry from BENCHMARK_QUERIES.
-
-    Returns:
-        A metrics dict with all measured values.
-    """
     question = query_config["question"]
     query_id = query_config["id"]
 
@@ -163,12 +74,10 @@ def run_single_benchmark(query_config: dict) -> dict:
     print(f"Question: {question[:80]}")
     print(f"{'─' * 60}")
 
-    # Check if OpenAI API key is available
     has_openai = bool(os.environ.get("OPENAI_API_KEY", ""))
 
     if not has_openai:
-        # Without API key, we can't run the full pipeline.
-        # Return a mock result with a warning.
+
         print(f"[Benchmark] WARNING: No OPENAI_API_KEY found. Running mock benchmark.")
         return {
             "query_id": query_id,
@@ -187,19 +96,14 @@ def run_single_benchmark(query_config: dict) -> dict:
             "note": "Skipped — OPENAI_API_KEY not set. Run with API key for real benchmarks.",
         }
 
-    # Import graph runner here (not at top) to avoid import errors if dependencies
-    # are partially installed during testing without API keys.
     from graph_builder import run_research
 
-    # Record start time for latency measurement
     start_time = time.time()
 
     try:
-        # Run the full agent pipeline
         final_state = run_research(question)
         elapsed = time.time() - start_time  # wall-clock latency in seconds
 
-        # ── EXTRACT METRICS ───────────────────────────────────────────────────
         recalled = final_state.get("recalled_memories", [])
         report = final_state.get("final_report", "")
         iteration = final_state.get("iteration", 0)
@@ -207,12 +111,9 @@ def run_single_benchmark(query_config: dict) -> dict:
         plan = final_state.get("plan", [])
         search_results = final_state.get("raw_search_results", [])
 
-        # Memory recall hit = at least one memory was recalled above threshold
+
         memory_hit = len(recalled) > 0
 
-        # Total search requests = number of unique search calls executed
-        # Approximation: len(plan) × iteration (each iteration runs all sub-queries)
-        # Actual count may be less due to deduplication in multi_search()
         search_count = len(search_results)  # deduplicated search results as proxy
 
         # Citation analysis
@@ -267,18 +168,7 @@ def run_single_benchmark(query_config: dict) -> dict:
 
 
 def compute_aggregate_metrics(results: List[dict]) -> dict:
-    """
-    Compute summary statistics across all benchmark runs.
 
-    Aggregates individual run metrics into averages and rates for the
-    summary table. Only includes completed runs in averages.
-
-    Args:
-        results: List of metric dicts from run_single_benchmark().
-
-    Returns:
-        Dict with aggregate/summary statistics.
-    """
     completed = [r for r in results if r["status"] == "completed"]
 
     if not completed:
@@ -308,19 +198,7 @@ def compute_aggregate_metrics(results: List[dict]) -> dict:
 
 
 def generate_markdown_table(results: List[dict], aggregate: dict) -> str:
-    """
-    Generate a formatted Markdown evaluation report with results table.
 
-    This is written to stdout and optionally to a file. The table uses
-    GitHub-flavored Markdown syntax for nice rendering in README files.
-
-    Args:
-        results: Individual run results.
-        aggregate: Aggregate statistics from compute_aggregate_metrics().
-
-    Returns:
-        Formatted Markdown string.
-    """
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     lines = [
@@ -379,21 +257,10 @@ def generate_markdown_table(results: List[dict], aggregate: dict) -> str:
 
 
 def main():
-    """
-    Run the full benchmark suite and save results.
 
-    Execution flow:
-    1. Print system info (API key availability, ChromaDB state).
-    2. Run each benchmark query sequentially.
-    3. Compute aggregate metrics.
-    4. Print Markdown table to stdout.
-    5. Save JSON results to ./data/benchmark_results.json.
-    """
     print("=" * 70)
     print("Research Agent Benchmark Suite")
     print("=" * 70)
-
-    # Print system diagnostics
     has_openai = bool(os.environ.get("OPENAI_API_KEY", ""))
     has_tavily = bool(os.environ.get("TAVILY_API_KEY", ""))
 
@@ -401,14 +268,12 @@ def main():
     print(f"  OPENAI_API_KEY:  {'✓ Set' if has_openai else '✗ Not set (benchmarks will be skipped)'}")
     print(f"  TAVILY_API_KEY:  {'✓ Set' if has_tavily else '✗ Not set (DuckDuckGo fallback active)'}")
 
-    # Check memory state
     try:
         memory = MemoryManager()
         print(f"  ChromaDB:        ✓ {memory.count} memories stored")
     except Exception as e:
         print(f"  ChromaDB:        ✗ Error: {e}")
 
-    # ── RUN BENCHMARKS ────────────────────────────────────────────────────────
     print(f"\nRunning {len(BENCHMARK_QUERIES)} benchmark queries...")
     results = []
 
@@ -416,17 +281,14 @@ def main():
         result = run_single_benchmark(query_config)
         results.append(result)
 
-    # ── COMPUTE AGGREGATES ────────────────────────────────────────────────────
     aggregate = compute_aggregate_metrics(results)
 
-    # ── GENERATE AND PRINT MARKDOWN TABLE ─────────────────────────────────────
     markdown_report = generate_markdown_table(results, aggregate)
     print(f"\n{'=' * 70}")
     print("BENCHMARK RESULTS")
     print("=" * 70)
     print(markdown_report)
 
-    # ── SAVE JSON RESULTS ─────────────────────────────────────────────────────
     output_path = Path(cfg.benchmark_output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
